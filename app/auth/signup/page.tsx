@@ -1,11 +1,16 @@
 "use client";
 
-import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "@tanstack/react-form";
 import { Input, PasswordInput, Button } from "@/app/components/elements";
 import { AuthCard, AuthSocialSection } from "../components";
 
 export default function Signup() {
+  const router = useRouter();
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
   const form = useForm({
     defaultValues: {
       email: "",
@@ -13,13 +18,53 @@ export default function Signup() {
       confirmPassword: "",
     },
     onSubmit: async ({ value }) => {
-      // TODO: Implement signup logic
-      console.log("Signup:", value);
+      setServerError(null);
+      setSuccessMessage(null);
+
+      try {
+        const response = await fetch("/api/auth/signup", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: value.email,
+            password: value.password,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          setServerError(data.error || "Something went wrong");
+          return;
+        }
+
+        setSuccessMessage(data.message);
+        // Optionally redirect after a delay
+        setTimeout(() => {
+          router.push("/auth/signin");
+        }, 3000);
+      } catch {
+        setServerError("An unexpected error occurred");
+      }
     },
   });
 
   return (
     <AuthCard title="Create an account">
+      {successMessage && (
+        <div className="mb-4 p-3 rounded-lg bg-teal/10 text-teal dark:bg-gold/10 dark:text-gold text-sm">
+          {successMessage}
+        </div>
+      )}
+
+      {serverError && (
+        <div className="mb-4 p-3 rounded-lg bg-danger-light text-danger text-sm">
+          {serverError}
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -135,16 +180,16 @@ export default function Signup() {
           )}
         </form.Field>
 
-        <form.Subscribe selector={(state) => state.canSubmit}>
-          {(canSubmit) => (
+        <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+          {([canSubmit, isSubmitting]) => (
             <Button
               type="submit"
               variant="primary"
               size="large"
               className="mt-2 w-full"
-              disabled={!canSubmit}
+              disabled={!canSubmit || isSubmitting}
             >
-              Create Account
+              {isSubmitting ? "Creating Account..." : "Create Account"}
             </Button>
           )}
         </form.Subscribe>

@@ -1,41 +1,49 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Input, Select, Button, SelectOption } from "@/app/components/elements";
-import { mockSongs } from "./mockData";
-
-// Extract unique values from mock data
-const getUniqueValues = (key: keyof typeof mockSongs[0]): SelectOption[] => {
-  const unique = [...new Set(mockSongs.map((song) => song[key] as string))];
-  return unique.map((value) => ({ value, label: value }));
-};
-
-const genreOptions = getUniqueValues("genre");
-const uploaderOptions = getUniqueValues("uploader");
-const languageOptions = getUniqueValues("language");
+import { useGenres, useLanguages, useUsers } from "@/hooks/swr";
 
 interface FilterValues {
   id: string;
   name: string;
   genre: string;
-  uploader: string;
+  created_by: string;
   language: string;
 }
 
 interface FilterProps {
-  onFilter: (filters: FilterValues) => void;
+  onFilterChange?: () => void;
 }
 
-function Filter({ onFilter }: FilterProps) {
+function Filter({ onFilterChange }: FilterProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: genres, isLoading: genresLoading } = useGenres();
+  const { data: languages, isLoading: languagesLoading } = useLanguages();
+  const { data: users, isLoading: usersLoading } = useUsers();
+
+  const genreOptions = useMemo<SelectOption[]>(() => {
+    if (!genres) return [];
+    return genres.map((g) => ({ value: g.id.toString(), label: g.name }));
+  }, [genres]);
+
+  const languageOptions = useMemo<SelectOption[]>(() => {
+    if (!languages) return [];
+    return languages.map((l) => ({ value: l.id.toString(), label: l.name }));
+  }, [languages]);
+
+  const uploaderOptions = useMemo<SelectOption[]>(() => {
+    if (!users) return [];
+    return users.map((u) => ({ value: u.id, label: u.email || u.id }));
+  }, [users]);
 
   const [filters, setFilters] = useState<FilterValues>({
     id: searchParams.get("id") || "",
     name: searchParams.get("name") || "",
     genre: searchParams.get("genre") || "",
-    uploader: searchParams.get("uploader") || "",
+    created_by: searchParams.get("created_by") || "",
     language: searchParams.get("language") || "",
   });
 
@@ -44,7 +52,7 @@ function Filter({ onFilter }: FilterProps) {
       id: searchParams.get("id") || "",
       name: searchParams.get("name") || "",
       genre: searchParams.get("genre") || "",
-      uploader: searchParams.get("uploader") || "",
+      created_by: searchParams.get("created_by") || "",
       language: searchParams.get("language") || "",
     });
   }, [searchParams]);
@@ -60,7 +68,7 @@ function Filter({ onFilter }: FilterProps) {
     });
 
     router.push(`?${params.toString()}`);
-    onFilter(filters);
+    onFilterChange?.();
   };
 
   const handleReset = () => {
@@ -68,12 +76,12 @@ function Filter({ onFilter }: FilterProps) {
       id: "",
       name: "",
       genre: "",
-      uploader: "",
+      created_by: "",
       language: "",
     };
     setFilters(emptyFilters);
     router.push("?");
-    onFilter(emptyFilters);
+    onFilterChange?.();
   };
 
   const updateFilter = (key: keyof FilterValues, value: string) => {
@@ -103,15 +111,15 @@ function Filter({ onFilter }: FilterProps) {
             options={[{ value: "", label: "All genres" }, ...genreOptions]}
             value={filters.genre}
             onChange={(value) => updateFilter("genre", value)}
-            placeholder="All genres"
+            placeholder={genresLoading ? "Loading..." : "All genres"}
             size="default"
           />
           <Select
             label="Uploader"
             options={[{ value: "", label: "All uploaders" }, ...uploaderOptions]}
-            value={filters.uploader}
-            onChange={(value) => updateFilter("uploader", value)}
-            placeholder="All uploaders"
+            value={filters.created_by}
+            onChange={(value) => updateFilter("created_by", value)}
+            placeholder={usersLoading ? "Loading..." : "All uploaders"}
             searchable
             size="default"
           />
@@ -120,7 +128,7 @@ function Filter({ onFilter }: FilterProps) {
             options={[{ value: "", label: "All languages" }, ...languageOptions]}
             value={filters.language}
             onChange={(value) => updateFilter("language", value)}
-            placeholder="All languages"
+            placeholder={languagesLoading ? "Loading..." : "All languages"}
             size="default"
           />
           <div className="flex items-end gap-2">

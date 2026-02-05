@@ -5,18 +5,12 @@ import { Footer } from "./Footer";
 
 interface Props {
   children: React.ReactNode;
-  isAuthenticated?: boolean;
-  userName?: string;
 }
 
-export function Layout({
-  children,
-  isAuthenticated = false,
-  userName = "User",
-}: Props) {
+export function Layout({ children }: Props) {
   return (
     <div className="flex min-h-screen flex-col">
-      <Header isAuthenticated={isAuthenticated} userName={userName} />
+      <Header />
       <main className="mx-auto w-full max-w-[1200px] flex-1 px-3">
         {children}
       </main>

@@ -2,27 +2,124 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSWRConfig } from "swr";
 import { Button, TextArea } from "@/app/components/elements";
-import { mockSongs } from "../mockData";
+import { useAdminSong, ADMIN_SONGS_LIST_KEY_PREFIX } from "@/hooks/swr";
 
-const formatDate = (date: Date) => {
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return null;
   return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date);
+  }).format(new Date(dateString));
 };
 
 export default function AdminSongDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { mutate } = useSWRConfig();
   const [note, setNote] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const song = mockSongs.find((s) => s.id === params.id);
+  const { data: song, isLoading, error } = useAdminSong(params.id);
 
-  if (!song) {
+  const handleDecision = async (decision: "APPROVE" | "REJECT") => {
+    if (!song) return;
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/admin/songs/decide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: song.id.toString(),
+          decision,
+          note: note || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to submit decision");
+      }
+
+      mutate((key) => typeof key === "string" && key.startsWith(ADMIN_SONGS_LIST_KEY_PREFIX), undefined, { revalidate: true });
+
+      router.push("/admin/songs");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUnpublish = async () => {
+    if (!song) return;
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`/api/admin/songs/${song.id}`, {
+        method: "PATCH",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to unpublish");
+      }
+
+      mutate((key) => typeof key === "string" && key.startsWith(ADMIN_SONGS_LIST_KEY_PREFIX), undefined, { revalidate: true });
+
+      router.push("/admin/songs");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!song) return;
+
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this song? This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`/api/admin/songs/${song.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete");
+      }
+
+      mutate((key) => typeof key === "string" && key.startsWith(ADMIN_SONGS_LIST_KEY_PREFIX), undefined, { revalidate: true });
+
+      router.push("/admin/songs");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isPublished = !!song?.published_at;
+
+  if (isLoading) {
+    return (
+      <div className="py-8 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal dark:border-gold"></div>
+      </div>
+    );
+  }
+
+  if (error || !song) {
     return (
       <div className="py-8">
         <div className="text-center">
@@ -34,18 +131,6 @@ export default function AdminSongDetailPage() {
       </div>
     );
   }
-
-  const handlePublish = () => {
-    console.log("Publishing song:", song.id, "Note:", note);
-    // TODO: Implement publish logic
-    router.push("/admin/songs");
-  };
-
-  const handleReject = () => {
-    console.log("Rejecting song:", song.id, "Note:", note);
-    // TODO: Implement reject logic
-    router.push("/admin/songs");
-  };
 
   return (
     <div className="py-8">
@@ -77,27 +162,27 @@ export default function AdminSongDetailPage() {
               {song.name}
             </h1>
             <p className="text-slate dark:text-cream/70 mt-1">
-              by {song.artistName}
+              by {song.artist_name}
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <InfoCard label="ID" value={`#${song.id}`} />
-            <InfoCard label="Language" value={song.language} />
-            <InfoCard label="Genre" value={song.genre} />
-            <InfoCard label="Uploader" value={song.uploader} />
-            <InfoCard label="Created" value={formatDate(song.createdAt)} />
+            <InfoCard label="Language" value={song.language?.name || "Unknown"} />
+            <InfoCard label="Genre" value={song.genre?.name || "Unknown"} />
+            <InfoCard label="Uploader" value={song.uploader_email || "Unknown"} />
+            <InfoCard label="Created" value={formatDate(song.created_at) || "Unknown"} />
             <InfoCard
               label="Published"
-              value={song.publishedAt ? formatDate(song.publishedAt) : "Not published"}
-              muted={!song.publishedAt}
+              value={song.published_at ? formatDate(song.published_at)! : "Not published"}
+              muted={!song.published_at}
             />
           </div>
 
           {/* Original Lyrics */}
           <div>
             <h2 className="text-lg font-semibold text-navy dark:text-cream mb-3">
-              Original Lyrics ({song.language})
+              Original Lyrics ({song.language?.name || "Unknown"})
             </h2>
             <div className="rounded-xl border border-slate/20 dark:border-cream/10 bg-slate/5 dark:bg-cream/5 p-4">
               <pre className="whitespace-pre-wrap text-sm text-navy dark:text-cream font-sans">
@@ -109,28 +194,28 @@ export default function AdminSongDetailPage() {
 
         {/* Translation & Actions */}
         <div className="space-y-6">
-          {song.translationLanguage && (
+          {song.lyrics_translation && (
             <>
               <div>
                 <h2 className="text-lg font-semibold text-navy dark:text-cream mb-1">
-                  Translation ({song.translationLanguage})
+                  Translation ({song.translation_language?.name || "Unknown"})
                 </h2>
-                {song.translatedName && (
+                {song.name_translation && (
                   <p className="text-slate dark:text-cream/70">
-                    {song.translatedName}
+                    {song.name_translation}
                   </p>
                 )}
               </div>
 
               <div className="rounded-xl border border-slate/20 dark:border-cream/10 bg-slate/5 dark:bg-cream/5 p-4">
                 <pre className="whitespace-pre-wrap text-sm text-navy dark:text-cream font-sans">
-                  {song.translatedLyrics}
+                  {song.lyrics_translation}
                 </pre>
               </div>
             </>
           )}
 
-          {!song.translationLanguage && (
+          {!song.lyrics_translation && (
             <div className="rounded-xl border border-slate/20 dark:border-cream/10 bg-slate/5 dark:bg-cream/5 p-8 text-center">
               <p className="text-slate/50 dark:text-cream/40 italic">
                 No translation provided
@@ -140,26 +225,60 @@ export default function AdminSongDetailPage() {
 
           {/* Admin Actions */}
           <div className="rounded-xl border border-slate/20 dark:border-cream/10 p-6 space-y-4">
-            <TextArea
-              label="Note (Optional)"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Add a note for the uploader..."
-              rows={4}
-            />
+            {isPublished ? (
+              <>
+                <p className="text-sm text-slate dark:text-cream/70">
+                  This song is currently published. You can unpublish it or delete it permanently.
+                </p>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={handleUnpublish}
+                    variant="secondary"
+                    className="flex-1"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Processing..." : "Unpublish"}
+                  </Button>
+                  <Button
+                    onClick={handleDelete}
+                    variant="danger"
+                    className="flex-1"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Processing..." : "Delete"}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <TextArea
+                  label="Note (Optional)"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Add a note for the uploader..."
+                  rows={4}
+                  disabled={isSubmitting}
+                />
 
-            <div className="flex gap-3">
-              <Button
-                onClick={handleReject}
-                variant="danger"
-                className="flex-1"
-              >
-                Reject
-              </Button>
-              <Button onClick={handlePublish} className="flex-1">
-                Publish
-              </Button>
-            </div>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => handleDecision("REJECT")}
+                    variant="danger"
+                    className="flex-1"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Processing..." : "Reject"}
+                  </Button>
+                  <Button
+                    onClick={() => handleDecision("APPROVE")}
+                    className="flex-1"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Processing..." : "Publish"}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -180,11 +299,10 @@ function InfoCard({
     <div className="rounded-lg border border-slate/20 dark:border-cream/10 p-3">
       <p className="text-xs text-slate dark:text-cream/50 mb-1">{label}</p>
       <p
-        className={`text-sm font-medium ${
-          muted
-            ? "text-slate/50 dark:text-cream/40 italic"
-            : "text-navy dark:text-cream"
-        }`}
+        className={`text-sm font-medium ${muted
+          ? "text-slate/50 dark:text-cream/40 italic"
+          : "text-navy dark:text-cream"
+          }`}
       >
         {value}
       </p>

@@ -23,18 +23,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const isAuthenticated = false;
-  const userName = "User";
-
   return (
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider>
-          <Layout isAuthenticated={isAuthenticated} userName={userName}>
-            {children}
-          </Layout>
+          <Layout>{children}</Layout>
         </ThemeProvider>
       </body>
     </html>

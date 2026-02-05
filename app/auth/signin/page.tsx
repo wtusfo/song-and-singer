@@ -1,24 +1,59 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "@tanstack/react-form";
 import { Input, PasswordInput, Button } from "@/app/components/elements";
 import { AuthCard, AuthSocialSection } from "../components";
 
 export default function Signin() {
+  const router = useRouter();
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
   const form = useForm({
     defaultValues: {
       email: "",
       password: "",
     },
     onSubmit: async ({ value }) => {
-      // TODO: Implement signin logic
-      console.log("Signin:", value);
+      setServerError(null);
+      setIsLoading(true);
+
+      try {
+        const response = await fetch("/api/auth/signin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(value),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          setServerError(data.error || "Failed to sign in");
+          return;
+        }
+
+        // Redirect to home page on success
+        router.push("/");
+        router.refresh();
+      } catch {
+        setServerError("An unexpected error occurred");
+      } finally {
+        setIsLoading(false);
+      }
     },
   });
 
   return (
     <AuthCard title="Welcome back">
+      {serverError && (
+        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+          {serverError}
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -108,9 +143,9 @@ export default function Signin() {
               variant="primary"
               size="large"
               className="mt-2 w-full"
-              disabled={!canSubmit}
+              disabled={!canSubmit || isLoading}
             >
-              Sign In
+              {isLoading ? "Signing In..." : "Sign In"}
             </Button>
           )}
         </form.Subscribe>

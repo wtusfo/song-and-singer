@@ -8,45 +8,16 @@ import {
   Button,
   SelectOption,
 } from "@/app/components/elements";
-
-const languageOptions: SelectOption[] = [
-  { value: "en", label: "English" },
-  { value: "es", label: "Spanish" },
-  { value: "fr", label: "French" },
-  { value: "de", label: "German" },
-  { value: "it", label: "Italian" },
-  { value: "pt", label: "Portuguese" },
-  { value: "ru", label: "Russian" },
-  { value: "ja", label: "Japanese" },
-  { value: "ko", label: "Korean" },
-  { value: "zh", label: "Chinese" },
-  { value: "ar", label: "Arabic" },
-  { value: "hi", label: "Hindi" },
-  { value: "tr", label: "Turkish" },
-  { value: "pl", label: "Polish" },
-  { value: "uk", label: "Ukrainian" },
-];
-
-const genreOptions: SelectOption[] = [
-  { value: "pop", label: "Pop" },
-  { value: "rock", label: "Rock" },
-  { value: "hip-hop", label: "Hip Hop" },
-  { value: "rnb", label: "R&B" },
-  { value: "jazz", label: "Jazz" },
-  { value: "blues", label: "Blues" },
-  { value: "country", label: "Country" },
-  { value: "electronic", label: "Electronic" },
-  { value: "classical", label: "Classical" },
-  { value: "reggae", label: "Reggae" },
-  { value: "folk", label: "Folk" },
-  { value: "metal", label: "Metal" },
-  { value: "punk", label: "Punk" },
-  { value: "soul", label: "Soul" },
-  { value: "indie", label: "Indie" },
-  { value: "alternative", label: "Alternative" },
-];
+import { useGenres, useLanguages } from "@/hooks/swr";
+import { useGenreOptions, useHandlers, useLanguageOptions } from "./hooks";
 
 export default function AddSongPage() {
+  const { data: genres, } = useGenres()
+  const { data: languages } = useLanguages()
+  const genreOptions = useGenreOptions(genres)
+  const languageOptions = useLanguageOptions(languages)
+  const { handleSubmit } = useHandlers()
+
   const form = useForm({
     defaultValues: {
       language: "",
@@ -54,13 +25,11 @@ export default function AddSongPage() {
       genre: "",
       artistName: "",
       lyrics: "",
-      translationLanguage: "",
-      translatedName: "",
-      translatedLyrics: "",
+      languageTranslation: "",
+      nameTranslation: "",
+      lyricsTranslation: "",
     },
-    onSubmit: async ({ value }) => {
-      console.log("Form submitted:", value);
-    },
+    onSubmit: async ({ value }) => handleSubmit(value),
   });
 
   return (
@@ -140,7 +109,7 @@ export default function AddSongPage() {
               Translation
             </h2>
 
-            <form.Field name="translationLanguage">
+            <form.Field name="languageTranslation">
               {(field) => (
                 <Select
                   label="Language"
@@ -154,7 +123,7 @@ export default function AddSongPage() {
               )}
             </form.Field>
 
-            <form.Field name="translatedName">
+            <form.Field name="nameTranslation">
               {(field) => (
                 <Input
                   label="Name (Optional)"
@@ -186,7 +155,7 @@ export default function AddSongPage() {
             )}
           </form.Field>
 
-          <form.Field name="translatedLyrics">
+          <form.Field name="lyricsTranslation">
             {(field) => (
               <TextArea
                 label="Lyrics"

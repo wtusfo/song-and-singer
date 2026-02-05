@@ -1,73 +1,50 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   useReactTable,
   getCoreRowModel,
-  getPaginationRowModel,
   createColumnHelper,
   flexRender,
 } from "@tanstack/react-table";
 import { Button } from "@/app/components/elements";
-import { mockSongs, Song } from "./mockData";
+import { useAdminSongs, Lyrics } from "@/hooks/swr";
 import { Filter, FilterValues } from "./Filter";
 
-const columnHelper = createColumnHelper<Song>();
+const columnHelper = createColumnHelper<Lyrics>();
 
-const formatDate = (date: Date) => {
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return null;
   return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date);
+  }).format(new Date(dateString));
 };
 
 export default function AdminSongsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: 10,
-  });
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
 
-  const getInitialFilters = useCallback((): FilterValues => ({
+  const appliedFilters = useMemo((): FilterValues => ({
     id: searchParams.get("id") || "",
     name: searchParams.get("name") || "",
     genre: searchParams.get("genre") || "",
-    uploader: searchParams.get("uploader") || "",
+    created_by: searchParams.get("created_by") || "",
     language: searchParams.get("language") || "",
   }), [searchParams]);
 
-  const [filters, setFilters] = useState<FilterValues>(getInitialFilters);
+  const { data, isLoading, error } = useAdminSongs(appliedFilters, { page, limit });
 
-  const filteredSongs = useMemo(() => {
-    return mockSongs.filter((song) => {
-      if (filters.id && !song.id.toLowerCase().includes(filters.id.toLowerCase())) {
-        return false;
-      }
-      if (filters.name && !song.name.toLowerCase().includes(filters.name.toLowerCase())) {
-        return false;
-      }
-      if (filters.genre && song.genre !== filters.genre) {
-        return false;
-      }
-      if (filters.uploader && song.uploader !== filters.uploader) {
-        return false;
-      }
-      if (filters.language && song.language !== filters.language) {
-        return false;
-      }
-      return true;
-    });
-  }, [filters]);
-
-  const handleFilter = (newFilters: FilterValues) => {
-    setFilters(newFilters);
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  };
+  const songs = data?.data ?? [];
+  const metadata = data?.metadata;
+  const totalCount = metadata?.count ?? 0;
+  const totalPages = Math.ceil(totalCount / limit);
 
   const columns = useMemo(
     () => [
@@ -79,11 +56,11 @@ export default function AdminSongsPage() {
           </span>
         ),
       }),
-      columnHelper.accessor("createdAt", {
+      columnHelper.accessor("created_at", {
         header: "Created",
         cell: (info) => formatDate(info.getValue()),
       }),
-      columnHelper.accessor("publishedAt", {
+      columnHelper.accessor("published_at", {
         header: "Published",
         cell: (info) => {
           const value = info.getValue();
@@ -102,14 +79,17 @@ export default function AdminSongsPage() {
           <span className="font-medium">{info.getValue()}</span>
         ),
       }),
-      columnHelper.accessor("language", {
+      columnHelper.accessor("language_id", {
         header: "Language",
+        cell: (info) => (
+          <span className="text-sm">{info.getValue()}</span>
+        ),
       }),
-      columnHelper.accessor("uploader", {
+      columnHelper.accessor("uploader_id", {
         header: "Uploader",
         cell: (info) => (
           <span className="text-sm text-slate dark:text-cream/70">
-            {info.getValue()}
+            {info.getValue() ?? "—"}
           </span>
         ),
       }),
@@ -118,19 +98,25 @@ export default function AdminSongsPage() {
   );
 
   const table = useReactTable({
-    data: filteredSongs,
+    data: songs,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    state: {
-      pagination,
-    },
-    onPaginationChange: setPagination,
   });
 
-  const handleRowClick = (songId: string) => {
+  const handleRowClick = (songId: number) => {
     router.push(`/admin/songs/${songId}`);
   };
+
+  if (error) {
+    return (
+      <div className="py-8">
+        <h1 className="text-2xl font-bold text-navy dark:text-cream mb-6">
+          Songs Management
+        </h1>
+        <div className="text-danger">Failed to load songs. Please try again.</div>
+      </div>
+    );
+  }
 
   return (
     <div className="py-8">
@@ -138,9 +124,14 @@ export default function AdminSongsPage() {
         Songs Management
       </h1>
 
-      <Filter onFilter={handleFilter} />
+      <Filter onFilterChange={() => setPage(1)} />
 
-      <div className="rounded-xl border border-slate/20 dark:border-cream/10 overflow-hidden">
+      <div className="rounded-xl border border-slate/20 dark:border-cream/10 overflow-hidden relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-white/50 dark:bg-navy/50 flex items-center justify-center z-10">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal dark:border-gold"></div>
+          </div>
+        )}
         <table className="w-full">
           <thead className="bg-slate/5 dark:bg-cream/5">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -153,9 +144,9 @@ export default function AdminSongsPage() {
                     {header.isPlaceholder
                       ? null
                       : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
                   </th>
                 ))}
               </tr>
@@ -185,33 +176,29 @@ export default function AdminSongsPage() {
       {/* Pagination */}
       <div className="mt-4 flex items-center justify-between">
         <div className="text-sm text-slate dark:text-cream/70">
-          Showing {filteredSongs.length === 0 ? 0 : table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{" "}
-          {Math.min(
-            (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-            filteredSongs.length
-          )}{" "}
-          of {filteredSongs.length} songs
+          Showing {totalCount === 0 ? 0 : (page - 1) * limit + 1} to{" "}
+          {Math.min(page * limit, totalCount)} of {totalCount} songs
         </div>
         <div className="flex gap-2">
           <Button
             variant="tertiary"
             size="small"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1 || isLoading}
           >
             Previous
           </Button>
           <div className="flex items-center gap-1">
-            {Array.from({ length: table.getPageCount() }, (_, i) => (
+            {Array.from({ length: totalPages }, (_, i) => (
               <button
                 key={i}
-                onClick={() => table.setPageIndex(i)}
+                onClick={() => setPage(i + 1)}
+                disabled={isLoading}
                 className={`
                   w-8 h-8 rounded-lg text-sm font-medium transition-colors cursor-pointer
-                  ${
-                    table.getState().pagination.pageIndex === i
-                      ? "bg-teal text-cream dark:bg-gold dark:text-navy"
-                      : "text-slate hover:bg-slate/10 dark:text-cream dark:hover:bg-cream/10"
+                  ${page === i + 1
+                    ? "bg-teal text-cream dark:bg-gold dark:text-navy"
+                    : "text-slate hover:bg-slate/10 dark:text-cream dark:hover:bg-cream/10"
                   }
                 `}
               >
@@ -222,8 +209,8 @@ export default function AdminSongsPage() {
           <Button
             variant="tertiary"
             size="small"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages || isLoading}
           >
             Next
           </Button>
