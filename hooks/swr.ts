@@ -205,3 +205,81 @@ export function useAdminSong(id: string | string[] | undefined) {
 
 // Helper to invalidate admin songs list cache
 export const ADMIN_SONGS_LIST_KEY_PREFIX = "/api/admin/songs/list";
+
+// Public lyrics listing
+export interface LyricsFilters {
+    search?: string;
+    language?: string;
+}
+
+export interface LyricsPagination {
+    page: number;
+    limit: number;
+}
+
+export interface LyricsMetadata {
+    count: number | null;
+    page: number;
+    limit: number;
+}
+
+export function useLyrics(filters: LyricsFilters, pagination: LyricsPagination) {
+    const buildQueryString = () => {
+        const params = new URLSearchParams();
+        params.set("page", pagination.page.toString());
+        params.set("limit", pagination.limit.toString());
+
+        if (filters.search) params.set("search", filters.search);
+        if (filters.language) params.set("language", filters.language);
+
+        return params.toString();
+    };
+
+    const key = `/api/lyrics?${buildQueryString()}`;
+
+    return useSWR(
+        key,
+        async (url: string) => {
+            const response = await fetch(url);
+
+            if (!response.ok) {
+                throw response;
+            }
+
+            const json = await response.json();
+            return {
+                data: json.data as LyricsWithRelations[],
+                metadata: json.metadata as LyricsMetadata,
+            };
+        },
+        {
+            revalidateOnFocus: false,
+            keepPreviousData: true,
+        }
+    );
+}
+
+export function useLyric(id: string | string[] | undefined) {
+    const key = id ? `/api/lyrics/${id}` : null;
+
+    return useSWR(
+        key,
+        async (url: string) => {
+            const response = await fetch(url);
+
+            if (!response.ok) {
+                const json = await response.json().catch(() => null);
+                const message =
+                    json?.error ??
+                    `Failed to load lyrics (status ${response.status})`;
+                throw new Error(message);
+            }
+
+            const json = await response.json();
+            return json.data as LyricsWithRelations;
+        },
+        {
+            revalidateOnFocus: false,
+        }
+    );
+}

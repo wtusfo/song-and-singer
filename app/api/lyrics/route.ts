@@ -3,6 +3,61 @@ import { createClient } from "@/lib/supabase/server";
 import { User } from "@supabase/supabase-js";
 import { protectRoute } from "@/lib/supabase/protectRoute";
 
+// Public GET endpoint for fetching published lyrics
+export async function GET(request: NextRequest) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const search = searchParams.get("search") || "";
+        const language = searchParams.get("language");
+        const page = parseInt(searchParams.get("page") || "1", 10);
+        const limit = parseInt(searchParams.get("limit") || "12", 10);
+
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+
+        const supabase = await createClient();
+
+        let query = supabase
+            .from("lyrics")
+            .select(`
+                *,
+                genre:genres(id, name),
+                language:languages!lyrics_language_id_fkey(id, name),
+                translation_language:languages!lyrics_language_translation_id_fkey(id, name)
+            `, { count: "exact" })
+            .not("published_at", "is", null)
+            .order("published_at", { ascending: false });
+
+        if (search) {
+            query = query.ilike("name", `%${search}%`);
+        }
+
+        if (language) {
+            query = query.eq("language_id", language);
+        }
+
+        const { data, error, count } = await query.range(from, to);
+
+        if (error) {
+            return NextResponse.json({ error: error.message }, { status: 400 });
+        }
+
+        return NextResponse.json({
+            data,
+            metadata: {
+                count,
+                page,
+                limit,
+            },
+        });
+    } catch {
+        return NextResponse.json(
+            { error: "An unexpected error occurred" },
+            { status: 500 }
+        );
+    }
+}
+
 type LyricsPayload = {
     name: string;
     nameTranslation: string | null;

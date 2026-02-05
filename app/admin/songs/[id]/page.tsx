@@ -172,6 +172,7 @@ export default function AdminSongDetailPage() {
             <InfoCard label="Genre" value={song.genre?.name || "Unknown"} />
             <InfoCard label="Uploader" value={song.uploader_email || "Unknown"} />
             <InfoCard label="Created" value={formatDate(song.created_at) || "Unknown"} />
+            <InfoCard label="Note" value={song.note || "-"} />
             <InfoCard
               label="Published"
               value={song.published_at ? formatDate(song.published_at)! : "Not published"}
